@@ -141,7 +141,7 @@ class CapteurService:
             query = """
                 SELECT 
                     c.id as capteur_id,
-                    c.nom_capteur,
+                    c.nom,
                     t.valeur,
                     t.unite,
                     t.date_update,
@@ -176,7 +176,7 @@ class CapteurService:
             query = """
                 SELECT 
                     c.id as capteur_id,
-                    c.nom_capteur,
+                    c.nom,
                     h.valeur,
                     h.unite,
                     h.date_update,
@@ -211,7 +211,7 @@ class CapteurService:
             query = """
                 SELECT 
                     c.id as capteur_id,
-                    c.nom_capteur,
+                    c.nom,
                     p.valeur,
                     p.unite,
                     p.date_update,
@@ -248,7 +248,7 @@ class CapteurService:
                     t.valeur,
                     t.unite,
                     t.date_update,
-                    c.nom_capteur,
+                    c.nom,
                     s.nom as salle_nom,
                     s.batiment,
                     s.etage
@@ -299,14 +299,14 @@ class CapteurService:
             query = """
                 SELECT 
                     c.id,
-                    c.nom_capteur,
+                    c.nom,
                     c.type_capteur,
                     c.date_installation,
                     s.nom as salle_nom
                 FROM capteur c
                 JOIN salle s ON c.id_salle = s.id
                 WHERE c.id_salle = %s AND c.is_active = TRUE
-                ORDER BY c.type_capteur, c.nom_capteur
+                ORDER BY c.type_capteur, c.nom
             """
             
             return execute_query(query, (salle_id,))

@@ -13,10 +13,10 @@ def test_database_connection():
     try:
         from app.database import ping
         ping()
-        print("✅ Connexion à la base de données OK")
+        print(" Connexion à la base de données OK")
         return True
     except Exception as e:
-        print(f"❌ Erreur de connexion à la base de données: {e}")
+        print(f" Erreur de connexion à la base de données: {e}")
         return False
 
 def test_salles_actives():
@@ -24,20 +24,20 @@ def test_salles_actives():
     try:
         from services.capteur_service import capteur_service
         
-        print("\n🔍 Test: Récupération des salles actives")
+        print("\n Test: Récupération des salles actives")
         salles = capteur_service.get_salles_actives()
         
         if salles:
-            print(f"✅ {len(salles)} salle(s) trouvée(s)")
+            print(f" {len(salles)} salle(s) trouvée(s)")
             for salle in salles[:3]:  # Afficher les 3 premières
                 print(f"   - ID: {salle['id']}, Nom: {salle['nom']}, Bâtiment: {salle['batiment']}, Étage: {salle['etage']}")
             return salles
         else:
-            print("ℹ️ Aucune salle active trouvée")
+            print("ℹ Aucune salle active trouvée")
             return []
             
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des salles: {e}")
+        print(f" Erreur lors de la récupération des salles: {e}")
         return []
 
 def test_capteurs_by_salle(salle_id):
@@ -45,20 +45,20 @@ def test_capteurs_by_salle(salle_id):
     try:
         from services.capteur_service import capteur_service
         
-        print(f"\n🔍 Test: Récupération des capteurs de la salle {salle_id}")
+        print(f"\n Test: Récupération des capteurs de la salle {salle_id}")
         capteurs = capteur_service.get_capteurs_by_salle(salle_id)
         
         if capteurs:
-            print(f"✅ {len(capteurs)} capteur(s) trouvé(s)")
+            print(f" {len(capteurs)} capteur(s) trouvé(s)")
             for capteur in capteurs:
-                print(f"   - ID: {capteur['id']}, Nom: {capteur['nom_capteur']}, Type: {capteur['type_capteur']}")
+                print(f"   - ID: {capteur['id']}, Nom: {capteur['nom']}, Type: {capteur['type_capteur']}")
             return capteurs
         else:
-            print(f"ℹ️ Aucun capteur trouvé pour la salle {salle_id}")
+            print(f"Aucun capteur trouvé pour la salle {salle_id}")
             return []
             
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des capteurs: {e}")
+        print(f" Erreur lors de la récupération des capteurs: {e}")
         return []
 
 def test_moyennes_by_salle(salle_id):
@@ -66,21 +66,21 @@ def test_moyennes_by_salle(salle_id):
     try:
         from services.capteur_service import capteur_service
         
-        print(f"\n🔍 Test: Récupération des moyennes de la salle {salle_id}")
+        print(f"\n Test: Récupération des moyennes de la salle {salle_id}")
         moyennes = capteur_service.get_moyennes_dernieres_donnees_by_salle(salle_id, 5)
         
         if moyennes:
-            print("✅ Moyennes récupérées:")
+            print("Moyennes récupérées:")
             print(f"   - Température: {moyennes.get('moyenne_temperature')} {moyennes.get('unite_temperature', '')}")
             print(f"   - Humidité: {moyennes.get('moyenne_humidite')} {moyennes.get('unite_humidite', '')}")
             print(f"   - Pression: {moyennes.get('moyenne_pression')} {moyennes.get('unite_pression', '')}")
             return moyennes
         else:
-            print(f"ℹ️ Aucune donnée de moyenne trouvée pour la salle {salle_id}")
+            print(f" Aucune donnée de moyenne trouvée pour la salle {salle_id}")
             return None
             
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des moyennes: {e}")
+        print(f" Erreur lors de la récupération des moyennes: {e}")
         return None
 
 def test_temperature_by_salle(salle_id):
@@ -88,20 +88,20 @@ def test_temperature_by_salle(salle_id):
     try:
         from services.capteur_service import capteur_service
         
-        print(f"\n🔍 Test: Récupération des températures de la salle {salle_id}")
+        print(f"\n Test: Récupération des températures de la salle {salle_id}")
         temperatures = capteur_service.get_temperature_by_salle(salle_id, 3)
         
         if temperatures:
-            print(f"✅ {len(temperatures)} mesure(s) de température trouvée(s)")
+            print(f" {len(temperatures)} mesure(s) de température trouvée(s)")
             for temp in temperatures:
-                print(f"   - Capteur: {temp['nom_capteur']}, Valeur: {temp['valeur']} {temp['unite']}, Date: {temp['date_update']}")
+                print(f"   - Capteur: {temp['nom']}, Valeur: {temp['valeur']} {temp['unite']}, Date: {temp['date_update']}")
             return temperatures
         else:
-            print(f"ℹ️ Aucune température trouvée pour la salle {salle_id}")
+            print(f" Aucune température trouvée pour la salle {salle_id}")
             return []
             
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des températures: {e}")
+        print(f" Erreur lors de la récupération des températures: {e}")
         return []
 
 def test_donnees_by_capteur(capteur_id):
@@ -109,13 +109,13 @@ def test_donnees_by_capteur(capteur_id):
     try:
         from services.capteur_service import capteur_service
         
-        print(f"\n🔍 Test: Récupération des données du capteur {capteur_id}")
+        print(f"\n Test: Récupération des données du capteur {capteur_id}")
         donnees = capteur_service.get_dernieres_donnees_by_capteur(capteur_id, 2)
         
         if donnees:
-            print("✅ Données du capteur récupérées:")
+            print(" Données du capteur récupérées:")
             capteur = donnees['capteur']
-            print(f"   - Capteur: {capteur['nom_capteur']} (Type: {capteur['type_capteur']})")
+            print(f"   - Capteur: {capteur['nom']} (Type: {capteur['type_capteur']})")
             print(f"   - Salle: {capteur['salle_nom']}")
             
             donnees_list = donnees['donnees']
@@ -126,11 +126,11 @@ def test_donnees_by_capteur(capteur_id):
             
             return donnees
         else:
-            print(f"ℹ️ Aucune donnée trouvée pour le capteur {capteur_id}")
+            print(f" Aucune donnée trouvée pour le capteur {capteur_id}")
             return None
             
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des données du capteur: {e}")
+        print(f" Erreur lors de la récupération des données du capteur: {e}")
         return None
 
 def main():
@@ -139,21 +139,21 @@ def main():
     
     # Test de connexion DB
     if not test_database_connection():
-        print("💥 Impossible de continuer sans connexion DB")
+        print(" Impossible de continuer sans connexion DB")
         return
     
     # Test des salles actives
     salles = test_salles_actives()
     
     if not salles:
-        print("💥 Aucune salle trouvée, impossible de continuer les tests")
+        print(" Aucune salle trouvée, impossible de continuer les tests")
         return
     
     # Prendre la première salle pour les tests
     salle_test = salles[0]
     salle_id = salle_test['id']
     
-    print(f"\n🎯 Tests avec la salle: {salle_test['nom']} (ID: {salle_id})")
+    print(f"\n Tests avec la salle: {salle_test['nom']} (ID: {salle_id})")
     
     # Test des capteurs de cette salle
     capteurs = test_capteurs_by_salle(salle_id)
@@ -169,7 +169,7 @@ def main():
         capteur_test = capteurs[0]
         test_donnees_by_capteur(capteur_test['id'])
     
-    print("\n🎉 Tests terminés !")
+    print("\n Tests terminés !")
 
 if __name__ == "__main__":
     main()
