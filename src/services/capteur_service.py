@@ -1,4 +1,4 @@
-from app.database import execute_query, execute_single_query
+from app.queries import execute_query, execute_single_query
 from typing import Dict, Any
 
 class CapteurService:
@@ -313,6 +313,237 @@ class CapteurService:
             
         except Exception as e:
             raise Exception(f"Erreur lors de la récupération des capteurs pour la salle {salle_id}: {str(e)}")
+
+    def verifier_conformite_salles(self, limit=10):
+        """
+        Vérifier la conformité de toutes les salles actives
+        Calcule les moyennes et compare avec les seuils de conformité
+        
+        Args:
+            limit (int): Nombre de dernières mesures pour calculer la moyenne
+            
+        Returns:
+            list: Liste des salles avec leur statut de conformité
+        """
+        try:
+            # 1. Récupérer toutes les salles actives
+            salles = self.get_salles_actives()
+            
+            if not salles:
+                return []
+            
+            resultats = []
+            
+            for salle in salles:
+                salle_id = salle['id']
+                
+                # 2. Calculer les moyennes pour cette salle
+                moyennes = self.get_moyennes_dernieres_donnees_by_salle(salle_id, limit)
+                
+                if not moyennes:
+                    # Pas de données pour cette salle
+                    resultats.append({
+                        'salle': salle,
+                        'moyennes': None,
+                        'conformite': None,
+                        'statut': 'AUCUNE_DONNEE',
+                        'alertes': ['Aucune donnée de capteur disponible']
+                    })
+                    continue
+                
+                # 3. Récupérer les seuils de conformité pour cette salle
+                conformite = self.get_seuils_conformite_by_salle(salle_id)
+                
+                if not conformite:
+                    # Pas de seuils définis pour cette salle
+                    resultats.append({
+                        'salle': salle,
+                        'moyennes': moyennes,
+                        'conformite': None,
+                        'statut': 'SEUILS_NON_DEFINIS',
+                        'alertes': ['Seuils de conformité non définis']
+                    })
+                    continue
+                
+                # 4. Vérifier la conformité
+                verification = self.verifier_seuils(moyennes, conformite)
+                
+                resultats.append({
+                    'salle': salle,
+                    'moyennes': moyennes,
+                    'conformite': conformite,
+                    'statut': verification['statut'],
+                    'alertes': verification['alertes'],
+                    'details_verification': verification['details']
+                })
+            
+            return resultats
+            
+        except Exception as e:
+            raise Exception(f"Erreur lors de la vérification de conformité: {str(e)}")
+
+    def get_seuils_conformite_by_salle(self, salle_id):
+        """
+        Récupérer les seuils de conformité actifs pour une salle
+        
+        Args:
+            salle_id (int): ID de la salle
+            
+        Returns:
+            dict: Seuils de conformité ou None si aucun seuil défini
+        """
+        try:
+            query = """
+                SELECT 
+                    id,
+                    salle_id,
+                    temperature_haute,
+                    temperature_basse,
+                    humidite_haute,
+                    humidite_basse,
+                    pression_haute,
+                    pression_basse,
+                    date_debut,
+                    date_fin
+                FROM conformite
+                WHERE salle_id = %s 
+                AND (date_fin IS NULL OR date_fin > NOW())
+                ORDER BY date_debut DESC
+                LIMIT 1
+            """
+            
+            return execute_single_query(query, (salle_id,))
+            
+        except Exception as e:
+            raise Exception(f"Erreur lors de la récupération des seuils de conformité pour la salle {salle_id}: {str(e)}")
+
+    def verifier_seuils(self, moyennes, conformite):
+        """
+        Vérifier si les moyennes respectent les seuils de conformité
+        
+        Args:
+            moyennes (dict): Moyennes calculées
+            conformite (dict): Seuils de conformité
+            
+        Returns:
+            dict: Résultat de la vérification avec score de conformité
+        """
+        alertes = []
+        details = {}
+        score_conformite = 1  # Score de base : tout est conforme
+        parametres_testes = 0
+        parametres_non_conformes = 0
+        
+        # Vérification température
+        if moyennes.get('moyenne_temperature') is not None:
+            parametres_testes += 1
+            temp = float(moyennes['moyenne_temperature'])
+            temp_min = float(conformite['temperature_basse']) if conformite['temperature_basse'] else None
+            temp_max = float(conformite['temperature_haute']) if conformite['temperature_haute'] else None
+            
+            conforme_temp = True
+            if temp_min is not None and temp < temp_min:
+                alertes.append(f"Température trop basse: {temp}°C < {temp_min}°C")
+                conforme_temp = False
+                parametres_non_conformes += 1
+            if temp_max is not None and temp > temp_max:
+                alertes.append(f"Température trop élevée: {temp}°C > {temp_max}°C")
+                conforme_temp = False
+                parametres_non_conformes += 1
+                
+            details['temperature'] = {
+                'valeur': temp,
+                'seuil_min': temp_min,
+                'seuil_max': temp_max,
+                'conforme': conforme_temp
+            }
+        
+        # Vérification humidité
+        if moyennes.get('moyenne_humidite') is not None:
+            parametres_testes += 1
+            hum = float(moyennes['moyenne_humidite'])
+            hum_min = float(conformite['humidite_basse']) if conformite['humidite_basse'] else None
+            hum_max = float(conformite['humidite_haute']) if conformite['humidite_haute'] else None
+            
+            conforme_hum = True
+            if hum_min is not None and hum < hum_min:
+                alertes.append(f"Humidité trop basse: {hum}% < {hum_min}%")
+                conforme_hum = False
+                parametres_non_conformes += 1
+            if hum_max is not None and hum > hum_max:
+                alertes.append(f"Humidité trop élevée: {hum}% > {hum_max}%")
+                conforme_hum = False
+                parametres_non_conformes += 1
+                
+            details['humidite'] = {
+                'valeur': hum,
+                'seuil_min': hum_min,
+                'seuil_max': hum_max,
+                'conforme': conforme_hum
+            }
+        
+        # Vérification pression
+        if moyennes.get('moyenne_pression') is not None:
+            parametres_testes += 1
+            pres = float(moyennes['moyenne_pression'])
+            pres_min = float(conformite['pression_basse']) if conformite['pression_basse'] else None
+            pres_max = float(conformite['pression_haute']) if conformite['pression_haute'] else None
+            
+            conforme_pres = True
+            if pres_min is not None and pres < pres_min:
+                alertes.append(f"Pression trop basse: {pres}hPa < {pres_min}hPa")
+                conforme_pres = False
+                parametres_non_conformes += 1
+            if pres_max is not None and pres > pres_max:
+                alertes.append(f"Pression trop élevée: {pres}hPa > {pres_max}hPa")
+                conforme_pres = False
+                parametres_non_conformes += 1
+                
+            details['pression'] = {
+                'valeur': pres,
+                'seuil_min': pres_min,
+                'seuil_max': pres_max,
+                'conforme': conforme_pres
+            }
+        
+        # Calcul du score de conformité basé sur le pourcentage de paramètres non conformes
+        if parametres_testes > 0:
+            pourcentage_non_conforme = (parametres_non_conformes / parametres_testes) * 100
+            
+            if pourcentage_non_conforme == 0:
+                score_conformite = 1  # Excellent : 100% conforme
+                niveau_conformite = "EXCELLENT"
+            elif pourcentage_non_conforme < 50:
+                score_conformite = 2  # Bon : moins de 50% non conforme
+                niveau_conformite = "BON"
+            elif pourcentage_non_conforme < 75:
+                score_conformite = 3  # Moyen : 50-74% non conforme
+                niveau_conformite = "MOYEN"
+            else:
+                score_conformite = 4  # Mauvais : 75%+ non conforme
+                niveau_conformite = "MAUVAIS"
+        else:
+            # Aucun paramètre testé
+            score_conformite = 1
+            niveau_conformite = "EXCELLENT"
+        
+        # Déterminer le statut global
+        if not alertes:
+            statut = 'CONFORME'
+        else:
+            statut = 'NON_CONFORME'
+        
+        return {
+            'statut': statut,
+            'alertes': alertes,
+            'details': details,
+            'score_conformite': score_conformite,
+            'niveau_conformite': niveau_conformite,
+            'parametres_testes': parametres_testes,
+            'parametres_non_conformes': parametres_non_conformes,
+            'pourcentage_conformite': round((parametres_testes - parametres_non_conformes) / parametres_testes * 100, 1) if parametres_testes > 0 else 100.0
+        }
+
 
 # Instance globale du service
 capteur_service = CapteurService() 
