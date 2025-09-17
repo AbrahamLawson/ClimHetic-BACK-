@@ -7,8 +7,11 @@ import time
 from sshtunnel import SSHTunnelForwarder
 from dotenv import load_dotenv
 
-# Charger les variables d'environnement
-load_dotenv()
+# Charger les variables d'environnement en gérant les erreurs
+try:
+    load_dotenv()
+except Exception as e:
+    print(f"⚠️ Avertissement SSH : Impossible de charger le fichier .env : {e}")
 
 # Variable globale pour stocker le tunnel
 _ssh_tunnel = None

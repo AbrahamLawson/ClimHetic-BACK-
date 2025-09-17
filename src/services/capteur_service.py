@@ -88,35 +88,38 @@ class CapteurService:
             # Récupérer les données selon le type de capteur
             type_capteur = capteur.get('type_capteur')  # type: ignore
             
+            # Récupérer la date d'installation pour filtrer les données
+            date_installation = capteur.get('date_installation')
+            
             if type_capteur == 'temperature':
                 temp_query = """
                     SELECT valeur, unite, date_update
                     FROM temperature
-                    WHERE capteur_id = %s
+                    WHERE capteur_id = %s AND date_update >= %s
                     ORDER BY date_update DESC
                     LIMIT %s
                 """
-                donnees = execute_query(temp_query, (capteur_id, limit))
+                donnees = execute_query(temp_query, (capteur_id, date_installation, limit))
                 
             elif type_capteur == 'humidite':
                 hum_query = """
                     SELECT valeur, unite, date_update
                     FROM humidite
-                    WHERE capteur_id = %s
+                    WHERE capteur_id = %s AND date_update >= %s
                     ORDER BY date_update DESC
                     LIMIT %s
                 """
-                donnees = execute_query(hum_query, (capteur_id, limit))
+                donnees = execute_query(hum_query, (capteur_id, date_installation, limit))
                 
             elif type_capteur == 'pression':
                 press_query = """
                     SELECT valeur, unite, date_update
                     FROM pression
-                    WHERE capteur_id = %s
+                    WHERE capteur_id = %s AND date_update >= %s
                     ORDER BY date_update DESC
                     LIMIT %s
                 """
-                donnees = execute_query(press_query, (capteur_id, limit))
+                donnees = execute_query(press_query, (capteur_id, date_installation, limit))
             
             return {
                 'capteur': capteur,
@@ -314,6 +317,47 @@ class CapteurService:
         except Exception as e:
             raise Exception(f"Erreur lors de la récupération des capteurs pour la salle {salle_id}: {str(e)}")
 
+    def get_derniere_mesure_date_by_salle(self, salle_id):
+        """
+        Récupérer la date de dernière mesure pour une salle (toutes mesures confondues)
+        
+        Args:
+            salle_id (int): ID de la salle
+            
+        Returns:
+            datetime: Date de la dernière mesure ou None
+        """
+        try:
+            query = """
+                SELECT MAX(derniere_mesure) as derniere_mesure_globale
+                FROM (
+                    SELECT MAX(t.date_update) as derniere_mesure
+                    FROM capteur c
+                    JOIN temperature t ON c.id = t.capteur_id
+                    WHERE c.id_salle = %s AND c.is_active = TRUE
+                    
+                    UNION ALL
+                    
+                    SELECT MAX(h.date_update) as derniere_mesure
+                    FROM capteur c
+                    JOIN humidite h ON c.id = h.capteur_id
+                    WHERE c.id_salle = %s AND c.is_active = TRUE
+                    
+                    UNION ALL
+                    
+                    SELECT MAX(p.date_update) as derniere_mesure
+                    FROM capteur c
+                    JOIN pression p ON c.id = p.capteur_id
+                    WHERE c.id_salle = %s AND c.is_active = TRUE
+                ) AS toutes_mesures
+            """
+            
+            result = execute_single_query(query, (salle_id, salle_id, salle_id))
+            return result['derniere_mesure_globale'] if result else None
+            
+        except Exception as e:
+            raise Exception(f"Erreur lors de la récupération de la dernière mesure pour la salle {salle_id}: {str(e)}")
+
     def verifier_conformite_salles(self, limit=10):
         """
         Vérifier la conformité de toutes les salles actives
@@ -340,6 +384,13 @@ class CapteurService:
                 # 2. Calculer les moyennes pour cette salle
                 moyennes = self.get_moyennes_dernieres_donnees_by_salle(salle_id, limit)
                 
+                # Récupérer les capteurs de la salle (pour tous les cas)
+                capteurs_salle = self.get_capteurs_by_salle(salle_id)
+                noms_capteurs = list(set([capteur['nom'] for capteur in capteurs_salle])) if capteurs_salle else []
+                
+                # Récupérer la date de dernière mesure pour cette salle
+                derniere_mesure_date = self.get_derniere_mesure_date_by_salle(salle_id)
+                
                 if not moyennes:
                     # Pas de données pour cette salle
                     resultats.append({
@@ -347,7 +398,9 @@ class CapteurService:
                         'moyennes': None,
                         'conformite': None,
                         'statut': 'AUCUNE_DONNEE',
-                        'alertes': ['Aucune donnée de capteur disponible']
+                        'alertes': ['Aucune donnée de capteur disponible'],
+                        'capteurs': noms_capteurs,
+                        'derniere_mesure_date': derniere_mesure_date
                     })
                     continue
                 
@@ -361,7 +414,9 @@ class CapteurService:
                         'moyennes': moyennes,
                         'conformite': None,
                         'statut': 'SEUILS_NON_DEFINIS',
-                        'alertes': ['Seuils de conformité non définis']
+                        'alertes': ['Seuils de conformité non définis'],
+                        'capteurs': noms_capteurs,
+                        'derniere_mesure_date': derniere_mesure_date
                     })
                     continue
                 
@@ -374,7 +429,16 @@ class CapteurService:
                     'conformite': conformite,
                     'statut': verification['statut'],
                     'alertes': verification['alertes'],
-                    'details_verification': verification['details']
+                    'capteurs': noms_capteurs,  # Noms uniques des capteurs
+                    'derniere_mesure_date': derniere_mesure_date,  # Date de dernière mesure
+                    'details_verification': {
+                        'details': verification['details'],
+                        'score_conformite': verification['score_conformite'],
+                        'niveau_conformite': verification['niveau_conformite'],
+                        'parametres_testes': verification['parametres_testes'],
+                        'parametres_non_conformes': verification['parametres_non_conformes'],
+                        'pourcentage_conformite': verification['pourcentage_conformite']
+                    }
                 })
             
             return resultats

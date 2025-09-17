@@ -1,1 +1,4 @@
-# Package services pour la logique métier 
+# -*- coding: utf-8 -*-
+"""
+Package services pour ClimHetic Backend
+"""

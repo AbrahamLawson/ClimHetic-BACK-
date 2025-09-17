@@ -1,1 +1,4 @@
-# Package routes pour les endpoints API 
+# -*- coding: utf-8 -*-
+"""
+Package routes pour ClimHetic Backend
+"""

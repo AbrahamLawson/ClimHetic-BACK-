@@ -2,8 +2,14 @@ import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+import sys
 
-load_dotenv()
+# Charger les variables d'environnement en gérant les erreurs
+try:
+    load_dotenv()
+except Exception as e:
+    print(f"⚠️ Avertissement : Impossible de charger le fichier .env : {e}")
+    print("💡 Créez un fichier .env avec vos variables de configuration ou définissez-les dans l'environnement système")
 
 
 DIALECT = os.getenv("DB_DIALECT", "mysql")

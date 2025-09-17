@@ -6,3 +6,4 @@ paramiko
 pytest
 pytest-cov
 flask
+flask-cors

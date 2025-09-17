@@ -29,7 +29,29 @@ class AdminService:
                         WHEN c.id_salle IS NULL THEN 'Non affilié'
                         WHEN c.is_active = 0 THEN 'Inactif'
                         ELSE 'Actif'
-                    END as statut
+                    END as statut,
+                    -- Dernière mesure selon le type de capteur (seulement après date_installation)
+                    CASE 
+                        WHEN c.type_capteur = 'temperature' THEN 
+                            (SELECT CONCAT(t.valeur, ' ', t.unite, ' (', DATE_FORMAT(t.date_update, '%d/%m/%Y %H:%i'), ')')
+                             FROM temperature t 
+                             WHERE t.capteur_id = c.id AND t.date_update >= c.date_installation
+                             ORDER BY t.date_update DESC 
+                             LIMIT 1)
+                        WHEN c.type_capteur = 'humidite' THEN 
+                            (SELECT CONCAT(h.valeur, ' ', h.unite, ' (', DATE_FORMAT(h.date_update, '%d/%m/%Y %H:%i'), ')')
+                             FROM humidite h 
+                             WHERE h.capteur_id = c.id AND h.date_update >= c.date_installation
+                             ORDER BY h.date_update DESC 
+                             LIMIT 1)
+                        WHEN c.type_capteur = 'pression' THEN 
+                            (SELECT CONCAT(p.valeur, ' ', p.unite, ' (', DATE_FORMAT(p.date_update, '%d/%m/%Y %H:%i'), ')')
+                             FROM pression p 
+                             WHERE p.capteur_id = c.id AND p.date_update >= c.date_installation
+                             ORDER BY p.date_update DESC 
+                             LIMIT 1)
+                        ELSE NULL
+                    END as derniere_mesure
                 FROM capteur c
                 LEFT JOIN salle s ON c.id_salle = s.id
                 ORDER BY c.is_active DESC, c.nom
@@ -155,18 +177,17 @@ class AdminService:
                 raise Exception("Salle introuvable")
             
             # Effectuer l'association
-            with get_db_connection() as connection:
-                with connection.cursor() as cursor:
-                    query = """
-                        UPDATE capteur 
-                        SET id_salle = %s 
-                        WHERE id = %s AND is_active = TRUE
-                    """
-                    cursor.execute(query, (salle_id, capteur_id))
-                    connection.commit()
-                    
-                    if cursor.rowcount == 0:
-                        raise Exception("Impossible d'associer le capteur")
+            with engine.connect() as conn:
+                query = """
+                    UPDATE capteur 
+                    SET id_salle = :salle_id 
+                    WHERE id = :capteur_id AND is_active = TRUE
+                """
+                result = conn.execute(text(query), {'salle_id': salle_id, 'capteur_id': capteur_id})
+                conn.commit()
+                
+                if result.rowcount == 0:
+                    raise Exception("Impossible d'associer le capteur")
             
             return {
                 'success': True,
@@ -196,18 +217,17 @@ class AdminService:
                 raise Exception("Le capteur n'est associé à aucune salle")
             
             # Effectuer la dissociation
-            with get_db_connection() as connection:
-                with connection.cursor() as cursor:
-                    query = """
-                        UPDATE capteur 
-                        SET id_salle = NULL 
-                        WHERE id = %s
-                    """
-                    cursor.execute(query, (capteur_id,))
-                    connection.commit()
-                    
-                    if cursor.rowcount == 0:
-                        raise Exception("Impossible de dissocier le capteur")
+            with engine.connect() as conn:
+                query = """
+                    UPDATE capteur 
+                    SET id_salle = NULL 
+                    WHERE id = :capteur_id
+                """
+                result = conn.execute(text(query), {'capteur_id': capteur_id})
+                conn.commit()
+                
+                if result.rowcount == 0:
+                    raise Exception("Impossible de dissocier le capteur")
             
             return {
                 'success': True,
@@ -216,6 +236,65 @@ class AdminService:
             
         except Exception as e:
             raise Exception(f"Erreur lors de la dissociation: {str(e)}")
+    
+    def changer_salle_capteur(self, capteur_id: int, nouvelle_salle_id: int):
+        """
+        Changer la salle d'un capteur déjà affilié
+        
+        Args:
+            capteur_id (int): ID du capteur
+            nouvelle_salle_id (int): ID de la nouvelle salle
+            
+        Returns:
+            dict: Résultat de l'opération
+        """
+        try:
+            # Vérifier que le capteur existe et est actif
+            capteur = self.get_capteur_by_id(capteur_id)
+            if not capteur:
+                raise Exception("Capteur introuvable")
+            
+            if not capteur['is_active']:
+                raise Exception("Le capteur n'est pas actif")
+            
+            # Vérifier que la nouvelle salle existe et est différente de l'actuelle
+            nouvelle_salle = self.get_salle_by_id(nouvelle_salle_id)
+            if not nouvelle_salle:
+                raise Exception("Nouvelle salle introuvable")
+            
+            if capteur['id_salle'] == nouvelle_salle_id:
+                raise Exception("Le capteur est déjà dans cette salle")
+            
+            # Note: Autorisation de plusieurs capteurs du même type dans la même salle
+            
+            # Effectuer le changement de salle et mettre à jour la date d'installation
+            query_update = """
+                UPDATE capteur 
+                SET id_salle = :id_salle, date_installation = NOW() 
+                WHERE id = :id AND is_active = TRUE
+            """
+            
+            with engine.connect() as connection:
+                result = connection.execute(text(query_update), {"id_salle": nouvelle_salle_id, "id": capteur_id})
+                connection.commit()
+                
+                if result.rowcount == 0:
+                    raise Exception("Impossible de changer la salle du capteur")
+            
+            # Récupérer l'ancien nom de salle pour le message
+            ancienne_salle_nom = "aucune salle"
+            if capteur['id_salle']:
+                ancienne_salle = self.get_salle_by_id(capteur['id_salle'])
+                if ancienne_salle:
+                    ancienne_salle_nom = ancienne_salle['nom']
+            
+            return {
+                'success': True,
+                'message': f'Capteur {capteur["nom"]} déplacé de "{ancienne_salle_nom}" vers "{nouvelle_salle["nom"]}" avec succès. Date d\'installation mise à jour.'
+            }
+            
+        except Exception as e:
+            raise Exception(f"Erreur lors du changement de salle: {str(e)}")
     
     def activer_capteur(self, capteur_id: int):
         """
@@ -228,18 +307,17 @@ class AdminService:
             dict: Résultat de l'opération
         """
         try:
-            with get_db_connection() as connection:
-                with connection.cursor() as cursor:
-                    query = """
-                        UPDATE capteur 
-                        SET is_active = TRUE 
-                        WHERE id = %s
-                    """
-                    cursor.execute(query, (capteur_id,))
-                    connection.commit()
-                    
-                    if cursor.rowcount == 0:
-                        raise Exception("Capteur introuvable")
+            with engine.connect() as conn:
+                query = """
+                    UPDATE capteur 
+                    SET is_active = TRUE 
+                    WHERE id = :capteur_id
+                """
+                result = conn.execute(text(query), {'capteur_id': capteur_id})
+                conn.commit()
+                
+                if result.rowcount == 0:
+                    raise Exception("Capteur introuvable")
             
             return {
                 'success': True,
@@ -260,18 +338,17 @@ class AdminService:
             dict: Résultat de l'opération
         """
         try:
-            with get_db_connection() as connection:
-                with connection.cursor() as cursor:
-                    query = """
-                        UPDATE capteur 
-                        SET is_active = FALSE, id_salle = NULL 
-                        WHERE id = %s
-                    """
-                    cursor.execute(query, (capteur_id,))
-                    connection.commit()
-                    
-                    if cursor.rowcount == 0:
-                        raise Exception("Capteur introuvable")
+            with engine.connect() as conn:
+                query = """
+                    UPDATE capteur 
+                    SET is_active = FALSE, id_salle = NULL 
+                    WHERE id = :capteur_id
+                """
+                result = conn.execute(text(query), {'capteur_id': capteur_id})
+                conn.commit()
+                
+                if result.rowcount == 0:
+                    raise Exception("Capteur introuvable")
             
             return {
                 'success': True,
@@ -405,15 +482,7 @@ class AdminService:
             if not salle:
                 raise Exception(f"Salle {id_salle} introuvable ou inactive")
             
-            # Vérifier qu'un capteur du même type n'existe pas déjà dans cette salle
-            capteur_existant_query = """
-                SELECT id FROM capteur 
-                WHERE id_salle = %s AND type_capteur = %s AND is_active = TRUE
-            """
-            capteur_existant = execute_single_query(capteur_existant_query, (id_salle, type_capteur))
-            
-            if capteur_existant:
-                raise Exception(f"Un capteur de type '{type_capteur}' existe déjà dans la salle '{salle['nom']}'")
+            # Note: Autorisation de plusieurs capteurs du même type dans la même salle
             
             # Insérer le nouveau capteur
             insert_query = """
@@ -531,16 +600,7 @@ class AdminService:
             if capteur['is_active']:
                 raise Exception(f"Le capteur {capteur_id} est déjà actif")
             
-            # Vérifier qu'un capteur du même type n'est pas déjà actif dans la même salle
-            if capteur['id_salle']:
-                capteur_actif_query = """
-                    SELECT id FROM capteur 
-                    WHERE id_salle = %s AND type_capteur = %s AND is_active = TRUE AND id != %s
-                """
-                capteur_actif = execute_single_query(capteur_actif_query, (capteur['id_salle'], capteur['type_capteur'], capteur_id))
-                
-                if capteur_actif:
-                    raise Exception(f"Un capteur de type '{capteur['type_capteur']}' est déjà actif dans la salle '{capteur['salle_nom']}'")
+            # Note: Autorisation de plusieurs capteurs du même type dans la même salle
             
             # Réactiver le capteur
             update_query = """

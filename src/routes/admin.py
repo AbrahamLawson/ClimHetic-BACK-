@@ -162,3 +162,50 @@ def supprimer_capteur(capteur_id):
             )
     except Exception as e:
         return handle_exception(e)
+
+@admin_bp.route('/capteurs/<int:capteur_id>/changer-salle', methods=['PUT'])
+def changer_salle_capteur(capteur_id):
+    """PUT /api/admin/capteurs/{id}/changer-salle - Changer la salle d'un capteur"""
+    try:
+        data = request.get_json()
+        
+        # Validation des données
+        if not data or 'nouvelle_salle_id' not in data:
+            return create_response(
+                success=False,
+                message='Champ requis: nouvelle_salle_id',
+                status_code=400
+            )
+        
+        nouvelle_salle_id = data['nouvelle_salle_id']
+        
+        # Validation du type
+        if not isinstance(nouvelle_salle_id, int):
+            return create_response(
+                success=False,
+                message='nouvelle_salle_id doit être un entier',
+                status_code=400
+            )
+        
+        # Changer la salle du capteur
+        result = admin_service.changer_salle_capteur(capteur_id, nouvelle_salle_id)
+        
+        return create_response(
+            data=result,
+            message=result['message']
+        )
+    except Exception as e:
+        return handle_exception(e)
+
+@admin_bp.route('/capteurs/<int:capteur_id>/dissocier', methods=['PUT'])
+def dissocier_capteur(capteur_id):
+    """PUT /api/admin/capteurs/{id}/dissocier - Dissocier un capteur de sa salle"""
+    try:
+        result = admin_service.dissocier_capteur_salle(capteur_id)
+        
+        return create_response(
+            data=result,
+            message=result['message']
+        )
+    except Exception as e:
+        return handle_exception(e)
