@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 from services.capteur_service import capteur_service
 
-# Créer le blueprint pour les routes des capteurs
 capteurs_bp = Blueprint('capteurs', __name__)
 
 def create_response(success=True, data=None, message="", status_code=200):
@@ -145,4 +144,136 @@ def get_temperature_by_capteur(capteur_id):
             message=f'Températures du capteur {capteur_id} récupérées avec succès'
         )
     except Exception as e:
-        return handle_exception(e) 
+        return handle_exception(e)
+
+@capteurs_bp.route('/conformite', methods=['GET'])
+def get_conformite_salles():
+    """GET /api/capteurs/conformite - Vérifier la conformité de toutes les salles"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        
+        resultats = capteur_service.verifier_conformite_salles(limit)
+        
+        total_salles = len(resultats)
+        salles_conformes = len([r for r in resultats if r['statut'] == 'CONFORME'])
+        salles_non_conformes = len([r for r in resultats if r['statut'] == 'NON_CONFORME'])
+        salles_sans_donnees = len([r for r in resultats if r['statut'] == 'AUCUNE_DONNEE'])
+        salles_sans_seuils = len([r for r in resultats if r['statut'] == 'SEUILS_NON_DEFINIS'])
+        
+        salles_avec_score = [r for r in resultats if r.get('details_verification', {}).get('score_conformite')]
+        scores_distribution = {1: 0, 2: 0, 3: 0, 4: 0}
+        niveaux_distribution = {"EXCELLENT": 0, "BON": 0, "MOYEN": 0, "MAUVAIS": 0}
+        score_moyen = 0
+        
+        if salles_avec_score:
+            for resultat in salles_avec_score:
+                score = resultat['details_verification']['score_conformite']
+                niveau = resultat['details_verification']['niveau_conformite']
+                scores_distribution[score] += 1
+                niveaux_distribution[niveau] += 1
+            
+            score_moyen = sum([r['details_verification']['score_conformite'] for r in salles_avec_score]) / len(salles_avec_score)
+        
+        alertes_temperature = []
+        alertes_humidite = []
+        alertes_pression = []
+        
+        for resultat in resultats:
+            if resultat['alertes']:
+                for alerte in resultat['alertes']:
+                    if 'Température' in alerte:
+                        alertes_temperature.append({
+                            'salle': resultat['salle']['nom'],
+                            'message': alerte
+                        })
+                    elif 'Humidité' in alerte:
+                        alertes_humidite.append({
+                            'salle': resultat['salle']['nom'],
+                            'message': alerte
+                        })
+                    elif 'Pression' in alerte:
+                        alertes_pression.append({
+                            'salle': resultat['salle']['nom'],
+                            'message': alerte
+                        })
+        
+        return create_response(
+            data={
+                'salles': resultats,
+                'statistiques': {
+                    'total': total_salles,
+                    'conformes': salles_conformes,
+                    'non_conformes': salles_non_conformes,
+                    'sans_donnees': salles_sans_donnees,
+                    'sans_seuils': salles_sans_seuils,
+                    'pourcentage_conformite': round((salles_conformes / total_salles * 100) if total_salles > 0 else 0, 2)
+                },
+                'scoring': {
+                    'score_moyen': round(score_moyen, 2),
+                    'distribution_scores': scores_distribution,
+                    'distribution_niveaux': niveaux_distribution,
+                    'salles_evaluees': len(salles_avec_score)
+                },
+                'alertes_par_type': {
+                    'temperature': alertes_temperature,
+                    'humidite': alertes_humidite,
+                    'pression': alertes_pression
+                },
+                'parametres': {
+                    'limite_mesures': limit
+                }
+            },
+            message=f'Vérification de conformité effectuée pour {total_salles} salle(s) - {salles_conformes} conforme(s), {salles_non_conformes} non conforme(s)'
+        )
+    except Exception as e:
+        return handle_exception(e)
+
+@capteurs_bp.route('/salles/<int:salle_id>/conformite', methods=['GET'])
+def get_conformite_salle(salle_id):
+    """GET /api/capteurs/salles/:id/conformite - Vérifier la conformité d'une salle spécifique"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        
+        moyennes = capteur_service.get_moyennes_dernieres_donnees_by_salle(salle_id, limit)
+        
+        if not moyennes:
+            return create_response(
+                success=False,
+                message=f'Aucune donnée trouvée pour la salle {salle_id}',
+                status_code=404
+            )
+        
+        conformite = capteur_service.get_seuils_conformite_by_salle(salle_id)
+        
+        if not conformite:
+            return create_response(
+                data={
+                    'salle_id': salle_id,
+                    'moyennes': moyennes,
+                    'conformite': None,
+                    'statut': 'SEUILS_NON_DEFINIS',
+                    'alertes': ['Seuils de conformité non définis pour cette salle']
+                },
+                message=f'Moyennes calculées mais aucun seuil de conformité défini pour la salle {salle_id}'
+            )
+        
+        verification = capteur_service.verifier_seuils(moyennes, conformite)
+        
+        return create_response(
+            data={
+                'salle_id': salle_id,
+                'moyennes': moyennes,
+                'conformite': conformite,
+                'statut': verification['statut'],
+                'alertes': verification['alertes'],
+                'details_verification': verification['details'],
+                'parametres': {
+                    'limite_mesures': limit
+                }
+            },
+            message=f'Vérification de conformité pour la salle {salle_id}: {verification["statut"]}'
+        )
+    except Exception as e:
+        return handle_exception(e)
+
+ 

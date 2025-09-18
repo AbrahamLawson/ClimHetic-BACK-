@@ -1,3 +1,9 @@
 sqlalchemy
 pymysql
 python-dotenv
+sshtunnel
+paramiko
+pytest
+pytest-cov
+flask
+flask-cors

@@ -9,9 +9,6 @@ def create_response(success=True, data=None, message="", status_code=200):
         payload["data"] = data
     return jsonify(payload), status_code
 
-# -----------------------
-# GET /api/admin/salles?limit=&offset=
-# -----------------------
 @admin_salle_bp.get("/")
 def list_salles():
     limit  = request.args.get("limit", 50, type=int)
@@ -24,9 +21,6 @@ def list_salles():
     data = [dict(r._mapping) for r in rows]
     return create_response(True, data=data, message="Liste des salles")
 
-# -----------------------
-# GET /api/admin/salles/<id>
-# -----------------------
 @admin_salle_bp.get("/<int:salle_id>")
 def get_salle(salle_id):
     rows = execute_query("SELECT * FROM salle WHERE id = :id", {"id": salle_id})
@@ -34,10 +28,6 @@ def get_salle(salle_id):
         return create_response(False, message="Salle introuvable", status_code=404)
     return create_response(True, data=dict(rows[0]._mapping), message="Salle trouvée")
 
-# -----------------------
-# POST /api/admin/salles
-# Body JSON: { nom, batiment, etage, capacite, etat?, niveau_confort? }
-# -----------------------
 @admin_salle_bp.post("/")
 def create_salle():
     data = request.get_json(force=True, silent=True) or {}
@@ -54,7 +44,6 @@ def create_salle():
 
     etat = data.get("etat", "active")
 
-    # Construire dynamiquement selon les colonnes présentes
     cols = ["nom","batiment","etage","capacite","etat"]
     params = {
         "nom": data["nom"].strip(),
@@ -69,21 +58,15 @@ def create_salle():
     sql = f"INSERT INTO salle ({colnames}) VALUES ({placeholders})"
 
     new_id = execute_write(sql, params)
-    # récupérer la salle créée
     row = execute_query("SELECT * FROM salle WHERE id = LAST_INSERT_ID()", {})[0]
     return create_response(True, data=dict(row._mapping), message="Salle créée", status_code=201)
 
-# -----------------------
-# PATCH /api/admin/salles/<id>
-# Body JSON: champs partiels à modifier
-# -----------------------
 @admin_salle_bp.patch("/<int:salle_id>")
 def update_salle(salle_id):
     data = request.get_json(force=True, silent=True) or {}
     if not data:
         return create_response(False, message="Aucune donnée à mettre à jour", status_code=400)
 
-    # Colonnes autorisées
     allowed = {"nom","batiment","etage","capacite","etat"}
     updates = {}
     for k,v in data.items():
@@ -93,7 +76,6 @@ def update_salle(salle_id):
     if not updates:
         return create_response(False, message="Aucun champ autorisé fourni", status_code=400)
 
-    # validations
     if "etage" in updates:
         try: updates["etage"] = int(updates["etage"])
         except ValueError: return create_response(False, message="etage doit être un entier", status_code=400)
@@ -111,17 +93,11 @@ def update_salle(salle_id):
         return create_response(False, message="Salle introuvable après mise à jour", status_code=404)
     return create_response(True, data=dict(rows[0]._mapping), message="Salle mise à jour")
 
-# -----------------------
-# DELETE /api/admin/salles/<id>?hard=true|false
-# hard=false => soft delete (etat='inactive')
-# hard=true  => suppression physique (⚠️ FK conformite)
-# -----------------------
 @admin_salle_bp.delete("/<int:salle_id>")
 def delete_salle(salle_id):
     hard = request.args.get("hard", "false").lower() == "true"
 
     if hard:
-        # ⚠️ échouera si FK conformite non CASCADE ou si données liées existent
         try:
             execute_write("DELETE FROM salle WHERE id = :id", {"id": salle_id})
             return create_response(True, message="Salle supprimée (hard)")

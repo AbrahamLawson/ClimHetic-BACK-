@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from sqlalchemy import text, bindparam
-from app.database import engine  # on réutilise l'engine existant
+from app.database import engine
 
 filters_bp = Blueprint("filters", __name__, url_prefix="/api")
 
@@ -12,10 +12,9 @@ def create_response(success=True, data=None, message="", status_code=200):
 
 @filters_bp.get("/filter")
 def filter_salles():
-    # multi-sélections depuis des checkboxes
-    batiments = request.args.getlist("batiment")         # ?batiment=A&batiment=B
-    etages    = request.args.getlist("etage", type=int)  # ?etage=0&etage=1
-    capacite  = request.args.get("capacite", type=int)   # min
+    batiments = request.args.getlist("batiment")
+    etages    = request.args.getlist("etage", type=int)
+    capacite  = request.args.get("capacite", type=int)
     only_with_conformite = request.args.get("only_with_conformite", "false").lower() == "true"
 
     limit   = request.args.get("limit", 20, type=int)
@@ -33,7 +32,7 @@ def filter_salles():
        AND (c.date_fin IS NULL OR NOW() BETWEEN c.date_debut AND c.date_fin)
     """
 
-    sql = f"""
+    sql =  f"""
       SELECT 
         s.id, s.nom, s.batiment, s.etage, s.capacite, s.etat, s.date_creation,
         c.id AS conformite_id,
@@ -63,7 +62,6 @@ def filter_salles():
     params["limit"]  = limit
     params["offset"] = offset
 
-    # exécution avec expanding
     with engine.connect() as conn:
         stmt = text(sql)
         if "batiments" in params:
