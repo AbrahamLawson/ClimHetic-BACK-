@@ -5,54 +5,80 @@ class CapteurService:
     
     def get_moyennes_dernieres_donnees_by_salle(self, salle_id, limit=10):
         """
-        Récupérer la moyenne des dernières données par salle (température, humidité, pression)
+        Récupérer la moyenne de la dernière mesure de chaque capteur par type dans une salle
+        LOGIQUE CORRIGÉE : Moyenne spatiale (dernière mesure de chaque capteur du même type)
+        au lieu de moyenne temporelle (plusieurs mesures d'un même capteur)
         
         Args:
             salle_id (int): ID de la salle
-            limit (int): Nombre de dernières mesures à considérer pour la moyenne
+            limit (int): Paramètre non utilisé (conservé pour compatibilité)
             
         Returns:
             dict: Moyennes des données ou None si aucune donnée
         """
         try:
             query = """
-                SELECT 
+                SELECT
                     s.id as salle_id,
                     s.nom as salle_nom,
                     s.batiment,
                     s.etage,
-                    -- Moyenne température
-                    AVG(t_data.valeur) as moyenne_temperature,
-                    -- Moyenne humidité
-                    AVG(h_data.valeur) as moyenne_humidite,
-                    -- Moyenne pression
-                    AVG(p_data.valeur) as moyenne_pression,
-                    -- Unités
-                    MAX(t_data.unite) as unite_temperature,
-                    MAX(h_data.unite) as unite_humidite,
-                    MAX(p_data.unite) as unite_pression
+                    AVG(derniere_temp.valeur) as moyenne_temperature,
+                    AVG(derniere_hum.valeur) as moyenne_humidite,
+                    AVG(derniere_press.valeur) as moyenne_pression,
+                    MAX(derniere_temp.unite) as unite_temperature,
+                    MAX(derniere_hum.unite) as unite_humidite,
+                    MAX(derniere_press.unite) as unite_pression,
+                    COUNT(DISTINCT derniere_temp.capteur_id) as nb_capteurs_temperature,
+                    COUNT(DISTINCT derniere_hum.capteur_id) as nb_capteurs_humidite,
+                    COUNT(DISTINCT derniere_press.capteur_id) as nb_capteurs_pression,
+                    GREATEST(
+                        COALESCE(MAX(derniere_temp.date_update), '1900-01-01'),
+                        COALESCE(MAX(derniere_hum.date_update), '1900-01-01'),
+                        COALESCE(MAX(derniere_press.date_update), '1900-01-01')
+                    ) as derniere_mesure_date
                 FROM salle s
-                LEFT JOIN capteur c ON s.id = c.id_salle
                 LEFT JOIN (
-                    SELECT capteur_id, valeur, unite, date_update,
-                           ROW_NUMBER() OVER (PARTITION BY capteur_id ORDER BY date_update DESC) as rn
-                    FROM temperature
-                ) t_data ON c.id = t_data.capteur_id AND c.type_capteur = 'temperature' AND t_data.rn <= %s
+                    SELECT DISTINCT
+                        c.id as capteur_id,
+                        c.id_salle,
+                        FIRST_VALUE(t.valeur) OVER (PARTITION BY c.id ORDER BY t.date_update DESC) as valeur,
+                        FIRST_VALUE(t.unite) OVER (PARTITION BY c.id ORDER BY t.date_update DESC) as unite,
+                        FIRST_VALUE(t.date_update) OVER (PARTITION BY c.id ORDER BY t.date_update DESC) as date_update
+                    FROM capteur c
+                    JOIN temperature t ON c.id = t.capteur_id
+                    WHERE c.type_capteur = 'temperature' AND c.is_active = TRUE
+                        AND t.date_update >= c.date_installation
+                ) derniere_temp ON s.id = derniere_temp.id_salle
                 LEFT JOIN (
-                    SELECT capteur_id, valeur, unite, date_update,
-                           ROW_NUMBER() OVER (PARTITION BY capteur_id ORDER BY date_update DESC) as rn
-                    FROM humidite
-                ) h_data ON c.id = h_data.capteur_id AND c.type_capteur = 'humidite' AND h_data.rn <= %s
+                    SELECT DISTINCT
+                        c.id as capteur_id,
+                        c.id_salle,
+                        FIRST_VALUE(h.valeur) OVER (PARTITION BY c.id ORDER BY h.date_update DESC) as valeur,
+                        FIRST_VALUE(h.unite) OVER (PARTITION BY c.id ORDER BY h.date_update DESC) as unite,
+                        FIRST_VALUE(h.date_update) OVER (PARTITION BY c.id ORDER BY h.date_update DESC) as date_update
+                    FROM capteur c
+                    JOIN humidite h ON c.id = h.capteur_id
+                    WHERE c.type_capteur = 'humidite' AND c.is_active = TRUE
+                        AND h.date_update >= c.date_installation
+                ) derniere_hum ON s.id = derniere_hum.id_salle
                 LEFT JOIN (
-                    SELECT capteur_id, valeur, unite, date_update,
-                           ROW_NUMBER() OVER (PARTITION BY capteur_id ORDER BY date_update DESC) as rn
-                    FROM pression
-                ) p_data ON c.id = p_data.capteur_id AND c.type_capteur = 'pression' AND p_data.rn <= %s
+                    SELECT DISTINCT
+                        c.id as capteur_id,
+                        c.id_salle,
+                        FIRST_VALUE(p.valeur) OVER (PARTITION BY c.id ORDER BY p.date_update DESC) as valeur,
+                        FIRST_VALUE(p.unite) OVER (PARTITION BY c.id ORDER BY p.date_update DESC) as unite,
+                        FIRST_VALUE(p.date_update) OVER (PARTITION BY c.id ORDER BY p.date_update DESC) as date_update
+                    FROM capteur c
+                    JOIN pression p ON c.id = p.capteur_id
+                    WHERE c.type_capteur = 'pression' AND c.is_active = TRUE
+                        AND p.date_update >= c.date_installation
+                ) derniere_press ON s.id = derniere_press.id_salle
                 WHERE s.id = %s AND s.etat = 'active'
                 GROUP BY s.id, s.nom, s.batiment, s.etage
             """
             
-            result = execute_single_query(query, (limit, limit, limit, salle_id))
+            result = execute_single_query(query, (salle_id,))
             return result
             
         except Exception as e:
@@ -230,7 +256,7 @@ class CapteurService:
             
         except Exception as e:
             raise Exception(f"Erreur lors de la récupération de la pression pour la salle {salle_id}: {str(e)}")
-
+ 
     def get_temperature_by_capteur(self, capteur_id, limit=10):
         """
         Récupérer les données de température d'un capteur spécifique
@@ -351,16 +377,23 @@ class CapteurService:
                 conformite = self.get_seuils_conformite_by_salle(salle_id)
                 
                 if not conformite:
+                    # Récupérer les capteurs même sans seuils
+                    capteurs = self.get_capteurs_by_salle(salle_id)
+                    
                     resultats.append({
                         'salle': salle,
                         'moyennes': moyennes,
                         'conformite': None,
                         'statut': 'SEUILS_NON_DEFINIS',
-                        'alertes': ['Seuils de conformité non définis']
+                        'alertes': ['Seuils de conformité non définis'],
+                        'capteurs': capteurs
                     })
                     continue
                 
                 verification = self.verifier_seuils(moyennes, conformite)
+                
+                # Récupérer les capteurs de la salle
+                capteurs = self.get_capteurs_by_salle(salle_id)
                 
                 resultats.append({
                     'salle': salle,
@@ -368,7 +401,8 @@ class CapteurService:
                     'conformite': conformite,
                     'statut': verification['statut'],
                     'alertes': verification['alertes'],
-                    'details_verification': verification['details']
+                    'details_verification': verification,
+                    'capteurs': capteurs
                 })
             
             return resultats
@@ -481,8 +515,8 @@ class CapteurService:
             pres_max = float(conformite['pression_haute']) if conformite['pression_haute'] else None
             
             conforme_pres = True
-            if pres_min is not None and pres < pres_min:
-                alertes.append(f"Pression trop basse: {pres}hPa < {pres_min}hPa")
+            if pres_min is not None and pres < 1005:
+                alertes.append(f"Pression trop basse: {pres}hPa < {1005}hPa")
                 conforme_pres = False
                 parametres_non_conformes += 1
             if pres_max is not None and pres > pres_max:
@@ -497,24 +531,21 @@ class CapteurService:
                 'conforme': conforme_pres
             }
         
-        if parametres_testes > 0:
-            pourcentage_non_conforme = (parametres_non_conformes / parametres_testes) * 100
-            
-            if pourcentage_non_conforme == 0:
-                score_conformite = 1 
-                niveau_conformite = "EXCELLENT"
-            elif pourcentage_non_conforme < 50:
-                score_conformite = 2 
-                niveau_conformite = "BON"
-            elif pourcentage_non_conforme < 75:
-                score_conformite = 3 
-                niveau_conformite = "MOYEN"
-            else:
-                score_conformite = 4 
-                niveau_conformite = "MAUVAIS"
-        else:
-            score_conformite = 1
+        # Logique corrigée : prendre en compte le nombre d'alertes
+        nombre_alertes = len(alertes)
+        
+        if nombre_alertes == 0:
+            score_conformite = 1 
             niveau_conformite = "EXCELLENT"
+        elif nombre_alertes == 1:
+            score_conformite = 2 
+            niveau_conformite = "BON"
+        elif nombre_alertes == 2:
+            score_conformite = 3 
+            niveau_conformite = "MOYEN"
+        else:  # 3+ alertes
+            score_conformite = 4 
+            niveau_conformite = "MAUVAIS"
         
         if not alertes:
             statut = 'CONFORME'
