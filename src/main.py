@@ -2,6 +2,9 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from routes.admin import admin_bp
 from routes.capteurs import capteurs_bp
+from routes.search import search_bp
+from routes.filters import filters_bp
+from routes.admin_salle import admin_salle_bp
 
 import os
 
@@ -15,6 +18,9 @@ def create_app():
     
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(capteurs_bp, url_prefix='/api/capteurs')
+    app.register_blueprint(search_bp),
+    app.register_blueprint(filters_bp),
+    app.register_blueprint(admin_salle_bp)
     
     @app.route('/api/health')
     def health_check():
@@ -65,6 +71,8 @@ def main():
         os.environ.setdefault('DB_SSL', '0')
     
     app = create_app()
+
+
     
     host = os.getenv('FLASK_HOST', '127.0.0.1')
     port = int(os.getenv('FLASK_PORT', 5000))
@@ -78,6 +86,12 @@ def main():
     print(f"  - Admin: http://{host}:{port}/api/admin/")
     print(f"  - Capteurs: http://{host}:{port}/api/capteurs/")
     
+    print("=== URL MAP ===")
+    for r in app.url_map.iter_rules():
+        print(r)
+    print("===============")
+
+
     try:
         app.run(host=host, port=port, debug=debug)
     except KeyboardInterrupt:
