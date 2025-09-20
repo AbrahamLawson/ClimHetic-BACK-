@@ -256,7 +256,7 @@ class CapteurService:
             
         except Exception as e:
             raise Exception(f"Erreur lors de la récupération de la pression pour la salle {salle_id}: {str(e)}")
-
+ 
     def get_temperature_by_capteur(self, capteur_id, limit=10):
         """
         Récupérer les données de température d'un capteur spécifique
