@@ -27,8 +27,6 @@ def get_ssh_config():
 
 def create_ssh_tunnel():
 
-    global _ssh_tunnel
-
     if not should_use_ssh():
         return None
 
@@ -82,8 +80,6 @@ def should_use_ssh():
     return os.getenv('USE_SSH_TUNNEL', 'false').lower() == 'true'
 
 def get_tunnel_status():
-
-    global _ssh_tunnel
 
     if not should_use_ssh():
         return {
