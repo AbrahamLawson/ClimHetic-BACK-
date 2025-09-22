@@ -11,7 +11,11 @@ import os
 def create_app():
     app = Flask(__name__)
     
-    CORS(app, origins=["http://localhost:5173", "http://localhost:3000"])
+    CORS(app, origins=[
+        "http://localhost:5173", 
+        "http://localhost:3000",
+        "http://09.hetic.arcplex.dev"  # Frontend en production
+    ])
     
     app.config['JSON_SORT_KEYS'] = False
     app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
