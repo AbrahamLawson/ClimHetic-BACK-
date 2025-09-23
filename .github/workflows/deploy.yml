@@ -57,7 +57,7 @@ jobs:
         script: |
           # Configuration
           export PROJECT_DIR="/home/abraham/climhetic-backend"
-          export REPO_URL="https://github.com/AbrahamLawson/ClimHetic-BACK.git"
+          export REPO_URL="https://github.com/AbrahamLawson/ClimHetic-BACK-.git"
           export BACKEND_PORT="5001"  # Port différent du frontend
           
           # Couleurs pour les logs
@@ -74,18 +74,28 @@ jobs:
           docker stop $(docker ps -q --filter "publish=$BACKEND_PORT") 2>/dev/null || true
           docker rm $(docker ps -aq --filter "publish=$BACKEND_PORT") 2>/dev/null || true
           
-          # Setup simple et direct
-          mkdir -p $PROJECT_DIR && cd $PROJECT_DIR
+          # Nettoyage et clone complet
+          rm -rf $PROJECT_DIR
+          mkdir -p $PROJECT_DIR
+          cd $PROJECT_DIR
+          git clone $REPO_URL .
           
-          # Stratégie Git simple (éviter clone & replace)
-          if [ -d ".git" ]; then
-              git fetch origin main && git reset --hard origin/main && git clean -fd
-          else
-              git clone $REPO_URL .
-          fi
+          # Configuration env avec vos paramètres DB
+          cat > .env << 'EOF'
+          # Connexion a la bdd via tunnel SSH local -> serveur
+          DB_DIALECT=mysql
+          DB_USER=leo
+          DB_PASSWORD=leo123
+          DB_HOST=127.0.0.1
+          DB_PORT=63306
+          DB_NAME=climhetic_db
+          DB_SSL=0
           
-          # Configuration env simple
-          [ ! -f ".env" ] && cp .env.example .env
+          # Flask Configuration
+          FLASK_HOST=0.0.0.0
+          FLASK_PORT=5000
+          FLASK_DEBUG=false
+          EOF
           
           # Build et deploy en une ligne (leçon frontend min 180)
           docker build -t climhetic-backend:latest . && \
