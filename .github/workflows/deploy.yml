@@ -80,21 +80,21 @@ jobs:
           cd $PROJECT_DIR
           git clone $REPO_URL .
           
-          # Configuration env avec vos paramètres DB
+          # Configuration env - créer le fichier .env avec les bonnes valeurs
+          echo "⚙️ Configuration du fichier .env..."
           cat > .env << 'EOF'
-          # Connexion a la bdd via tunnel SSH local -> serveur
           DB_DIALECT=mysql
-          DB_USER=leo
-          DB_PASSWORD=leo123
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           DB_HOST=127.0.0.1
           DB_PORT=63306
           DB_NAME=climhetic_db
           DB_SSL=0
           
-          # Flask Configuration
           FLASK_HOST=0.0.0.0
           FLASK_PORT=5000
           FLASK_DEBUG=false
+          FLASK_ENV=production
           EOF
           
           # Build et deploy en une ligne (leçon frontend min 180)
