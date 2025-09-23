@@ -49,22 +49,20 @@ jobs:
     
     - name: Deploy to server
       uses: appleboy/ssh-action@v1.0.0
+      env:
+        DB_USER: ${{ secrets.DB_USER }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       with:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USERNAME }}
         key: ${{ secrets.SSH_KEY }}
         port: ${{ secrets.PORT }}
+        envs: DB_USER,DB_PASSWORD
         script: |
           # Configuration
           export PROJECT_DIR="/home/abraham/climhetic-backend"
           export REPO_URL="https://github.com/AbrahamLawson/ClimHetic-BACK-.git"
           export BACKEND_PORT="5001"  # Port différent du frontend
-          
-          # Couleurs pour les logs
-          RED='\033[0;31m'
-          GREEN='\033[0;32m'
-          YELLOW='\033[1;33m'
-          NC='\033[0m' # No Color
           
           echo "🚀 Starting ClimHetic Backend deployment..."
           
@@ -82,10 +80,10 @@ jobs:
           
           # Configuration env - créer le fichier .env avec les bonnes valeurs
           echo "⚙️ Configuration du fichier .env..."
-          cat > .env << 'EOF'
+          cat > .env << EOF
           DB_DIALECT=mysql
-          DB_USER=${{ secrets.DB_USER }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_USER=${DB_USER}
+          DB_PASSWORD=${DB_PASSWORD}
           DB_HOST=127.0.0.1
           DB_PORT=63306
           DB_NAME=climhetic_db
