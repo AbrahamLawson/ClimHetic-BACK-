@@ -11,10 +11,14 @@ import os
 def create_app():
     app = Flask(__name__)
     
+    # Configuration CORS pour le développement
     CORS(app, origins=[
-        "http://localhost:5173", 
-        "http://localhost:3000",
-        "http://09.hetic.arcplex.dev"  # Frontend en production
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Create React App
+        "http://localhost:8080",  # Vue CLI
+        "http://127.0.0.1:3000",  # Alternative localhost
+        "http://127.0.0.1:5173",  # Alternative localhost
+        "https://09.hetic.arcplex.dev"  # Frontend en production (HTTPS)
     ])
     
     app.config['JSON_SORT_KEYS'] = False
